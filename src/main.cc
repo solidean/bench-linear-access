@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <filesystem>
+#include <fstream>
 #include <print>
 #include <random>
 #include <span>
@@ -29,17 +31,13 @@ struct experiment_config
     /// number of runs per block size (default 9, median is reported)
     size_t runs = 7;
 
-    /// size of the backing allocation that blocks are drawn from;
-    /// must satisfy: working_set_bytes * runs <= backing_memory_bytes
-    size_t backing_memory_bytes = 4uLL << 30;
-
+    /// if true, chooses random blocks per run and clobbers memory in between
+    /// if false, repeats runs on the same block set with only a single initial clobber
     bool randomize_runs = true;
 };
 
 struct experiment_result
 {
-    double secs_data_prepare = -1;
-
     uint64_t result_hash = 0;
 
     struct block_result
@@ -53,21 +51,19 @@ struct experiment_result
 };
 
 // create a large amount of randomly initialized backing memory
-std::vector<float> make_backing_memory(std::default_random_engine& rng, experiment_config const& cfg, experiment_result& res)
+std::vector<float> make_backing_memory(std::default_random_engine& rng, size_t backing_bytes)
 {
     std::vector<float> data;
 
     timer t;
 
-    data.resize(cfg.backing_memory_bytes / sizeof(float));
+    data.resize(backing_bytes / sizeof(float));
     for (auto& d : data)
         d = rng() / float(rng.max()) * 2 - 1; // we don't care about quality
 
-    res.secs_data_prepare = t.elapsed_secs();
-
-    std::println("created {:.1} GB backing memory in {:.2} sec",   //
-                 cfg.backing_memory_bytes / 1024. / 1024. / 1024., //
-                 res.secs_data_prepare);
+    std::println("created {:.1f} GB backing memory in {:.2f} sec", //
+                 backing_bytes / 1024. / 1024. / 1024.,          //
+                 t.elapsed_secs());
     std::fflush(stdout);
 
     return data;
@@ -113,30 +109,29 @@ void make_random_blocks(std::default_random_engine& rng,
     std::shuffle(blocks.begin(), blocks.end(), rng);
 }
 
-experiment_result run_experiment(std::string_view kernel_name, experiment_config cfg)
+experiment_result run_experiment(std::string_view kernel_name, experiment_config cfg, std::span<float const> backing_data)
 {
     assert(cfg.kernel != nullptr);
     assert(std::has_single_bit(cfg.working_set_bytes));
     assert(std::has_single_bit(cfg.block_bytes_base));
     assert(cfg.block_bytes_base >= 32);
-    assert(cfg.working_set_bytes * cfg.runs <= cfg.backing_memory_bytes);
+    assert(backing_data.size() * sizeof(float) >= cfg.working_set_bytes * cfg.runs);
 
     experiment_result res;
 
     std::default_random_engine rng;
     rng.seed(12345);
 
-    auto const data = make_backing_memory(rng, cfg, res);
-
     std::vector<double> tmp_timing;
     std::vector<std::span<float const>> blocks;
 
     // run each block size
-    std::println("experiment per blocksize (bs):");
+    std::println("experiment '{}' (randomized={}, ws={} MB) per blocksize (bs):", kernel_name, cfg.randomize_runs,
+                 cfg.working_set_bytes >> 20);
     for (size_t block_bytes = cfg.block_bytes_base;
          block_bytes <= cfg.working_set_bytes && block_bytes <= cfg.block_bytes_max; block_bytes *= 2)
     {
-        make_random_blocks(rng, blocks, data, cfg, block_bytes);
+        make_random_blocks(rng, blocks, backing_data, cfg, block_bytes);
 
         // for non-randomized runs, we want to clobber once at the beginning
         if (!cfg.randomize_runs)
@@ -182,25 +177,55 @@ experiment_result run_experiment(std::string_view kernel_name, experiment_config
 
 int main()
 {
-    auto const res = run_experiment( //
-        "scalar_stats",              //
-        {
-            .kernel = kernel_scalar_stats,
-            // .kernel = kernel_simd_sum,
-            // .kernel = kernel_heavy,
-            .working_set_bytes = 64 * 1024uLL << 10,
-            .runs = 17,
-            // .working_set_bytes = 2 * 1024uLL << 10, // DEBUG
-            // .backing_memory_bytes = 64uLL << 20,    // DEBUG
-            .randomize_runs = true,
-        });
+    timer total_timer;
 
-    // ensure results are never elided
-    std::println("hash = {:016x}", res.result_hash);
-    std::println("");
+    struct kernel_entry
+    {
+        std::string_view name;
+        experiment_config::kernel_fun fn;
+        size_t runs;
+    };
+    std::array kernels = {
+        kernel_entry{"scalar_stats", kernel_scalar_stats, 11},
+        kernel_entry{"simd_sum", kernel_simd_sum, 17},
+        kernel_entry{"heavy", kernel_heavy, 5},
+    };
 
-    // results
-    for (auto const& br : res.block_results)
-        std::println("{:5} MB/s for {:8} B blocks", int(br.total_size_bytes / br.secs / 1024. / 1024.),
-                     br.block_size_bytes);
+    size_t const backing_bytes = 4uLL << 30;
+    std::default_random_engine rng;
+    rng.seed(12345);
+    auto const backing_data = make_backing_memory(rng, backing_bytes);
+    std::span<float const> const backing_span = backing_data;
+
+    std::ofstream csv("result.csv");
+    csv << "kernel,randomized,working_set_bytes,block_size_bytes,backing_size_bytes,duration_secs,hash\n";
+
+    for (auto const& k : kernels)
+        for (bool randomized : {true, false})
+            for (size_t ws = 1uLL << 20; ws <= 64uLL << 20; ws *= 2)
+            {
+                auto const res = run_experiment(k.name,
+                                                {
+                                                    .kernel = k.fn,
+                                                    .working_set_bytes = ws,
+                                                    .runs = k.runs,
+                                                    .randomize_runs = randomized,
+                                                },
+                                                backing_span);
+
+                for (auto const& br : res.block_results)
+                    csv << k.name << ","                          //
+                        << (randomized ? "true" : "false") << "," //
+                        << ws << ","                              //
+                        << br.block_size_bytes << ","             //
+                        << backing_bytes << ","                   //
+                        << br.secs << ","                         //
+                        << std::format("{:016x}", res.result_hash) << "\n";
+            }
+
+    csv.close();
+
+    auto const csv_path = std::filesystem::absolute("result.csv");
+    std::println("result written to: {}", csv_path.string());
+    std::println("total time: {:.2f} sec", total_timer.elapsed_secs());
 }
