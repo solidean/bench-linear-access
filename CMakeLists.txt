@@ -6,3 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(bench-linear-access src/main.cc)
 target_include_directories(bench-linear-access PRIVATE src)
+
+if(MSVC)
+    target_compile_options(bench-linear-access PRIVATE /arch:AVX2)
+else()
+    target_compile_options(bench-linear-access PRIVATE -mavx2)
+endif()

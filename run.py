@@ -16,9 +16,9 @@ def main():
 
     # run the benchmark
     if sys.platform == "win32":
-        exe = ROOT / "build" / "bin" / "Release" / "bench-linear-access.exe"
+        exe = ROOT / "build" / "Release" / "bench-linear-access.exe"
     else:
-        exe = ROOT / "build" / "bin" / "bench-linear-access"
+        exe = ROOT / "build" / "bench-linear-access"
     subprocess.run([str(exe)], check=True)
 
 

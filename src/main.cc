@@ -1,47 +1,11 @@
 #include "helper.hh"
+#include "kernels.hh"
 
 #include <algorithm>
-#include <limits>
 #include <print>
 #include <random>
 #include <span>
 #include <vector>
-
-struct stats
-{
-    float m0 = 0;
-    float m1 = 0;
-    float m2 = 0;
-    float min = +std::numeric_limits<float>::max();
-    float max = -std::numeric_limits<float>::max();
-
-    static stats from_value(float d) { return {1, d, d * d, d, d}; }
-
-    void add(stats const& s)
-    {
-        m0 += s.m0;
-        m1 += s.m1;
-        m2 += s.m2;
-        min = std::min(min, s.min);
-        max = std::max(max, s.max);
-    }
-};
-
-stats compute_block_stats(std::span<float const> data)
-{
-    stats s;
-    for (auto d : data)
-        s.add(stats::from_value(d));
-    return s;
-}
-
-stats compute_full_stats(std::span<std::span<float const> const> data)
-{
-    stats s;
-    for (auto block : data)
-        s.add(compute_block_stats(block));
-    return s;
-}
 
 struct experiment_config
 {
@@ -56,7 +20,7 @@ struct experiment_result
 {
     double secs_data_prepare = -1;
 
-    std::vector<stats> result_stats;
+    std::vector<uint64_t> result_hashes;
 
     struct block_result
     {
@@ -123,9 +87,9 @@ experiment_result run_experiment(experiment_config cfg)
             auto const block_span = std::span<std::span<float const> const>(
                 blocks.data() + r * blocks_per_run * cfg.randomize_runs, blocks_per_run);
             timer t;
-            auto const s = compute_full_stats(block_span);
+            auto const h = kernel_scalar_stats(block_span);
             auto const secs = t.elapsed_secs();
-            res.result_stats.push_back(s);
+            res.result_hashes.push_back(h);
 
             tmp_timing.push_back(secs);
 
@@ -153,15 +117,11 @@ int main()
         .randomize_runs = false,
     });
 
-    // ensure total stats are never elided
-    stats total_stats;
-    for (auto const& s : res.result_stats)
-        total_stats.add(s);
-    std::println("stats.m0  = {}", total_stats.m0);
-    std::println("stats.m1  = {}", total_stats.m1);
-    std::println("stats.m2  = {}", total_stats.m2);
-    std::println("stats.min = {}", total_stats.min);
-    std::println("stats.max = {}", total_stats.max);
+    // ensure results are never elided
+    uint64_t total_hash = 0;
+    for (auto h : res.result_hashes)
+        total_hash ^= h;
+    std::println("hash = {:016x}", total_hash);
     std::println("");
 
     // results
