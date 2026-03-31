@@ -88,7 +88,7 @@ inline uint64_t kernel_simd_sum(std::span<std::span<float const> const> data)
 }
 
 // Heavy compute kernel: accumulates v = sin(v + data[i]) over all data.
-inline uint64_t kernel_heavy(std::span<std::span<float const> const> data)
+inline uint64_t kernel_heavy_sin(std::span<std::span<float const> const> data)
 {
     float v = 0.f;
     for (auto block : data)

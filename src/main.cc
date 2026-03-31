@@ -188,7 +188,7 @@ int main()
     std::array kernels = {
         kernel_entry{"scalar_stats", kernel_scalar_stats, 11},
         kernel_entry{"simd_sum", kernel_simd_sum, 17},
-        kernel_entry{"heavy", kernel_heavy, 5},
+        kernel_entry{"heavy_sin", kernel_heavy_sin, 5},
     };
 
     size_t const backing_bytes = 4uLL << 30;

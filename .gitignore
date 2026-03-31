@@ -48,4 +48,4 @@ __pycache__
 .cache
 
 # results
-result.csv
+/result.csv
