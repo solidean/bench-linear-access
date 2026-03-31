@@ -3,6 +3,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <span>
 
@@ -81,6 +82,8 @@ inline uint64_t kernel_simd_sum(std::span<std::span<float const> const> data)
     for (auto w : hi)
         h ^= w;
     return uint64_t(h);
+#else
+#error "Need at least AVX2 or NEON support"
 #endif
 }
 

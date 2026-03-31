@@ -12,13 +12,14 @@ ROOT = Path(__file__).parent
 def main():
     # build first
     import build as b
-    b.build(config="Debug")
+    b.build(config="debug")
 
     # run the benchmark
+    config = "debug"
     if sys.platform == "win32":
-        exe = ROOT / "build" / "Debug" / "bench-linear-access.exe"
+        exe = ROOT / "build" / config / "bin" / config.title() / "bench-linear-access.exe"
     else:
-        exe = ROOT / "build" / "bench-linear-access"
+        exe = ROOT / "build" / config / "bin" / "bench-linear-access"
     subprocess.run([str(exe)], check=True)
 
 

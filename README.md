@@ -11,7 +11,7 @@ TODO: describe measurement policy (median of 9)
 ## Requirements
 
 - [CMake](https://cmake.org/) >= 3.25
-- A C++23 compiler: GCC 13+, Clang 17+, or MSVC 19.38+ (VS 2022 17.8+)
+- A C++23 compiler: GCC 14+, Clang 17+, or MSVC 19.38+ (VS 2022 17.8+)
 - Python 3.11+
 - [uv](https://github.com/astral-sh/uv) *(optional, for the shortcut scripts)*
 

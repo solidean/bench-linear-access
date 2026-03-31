@@ -43,3 +43,6 @@
 # build
 build
 __pycache__
+
+# clangd
+.cache

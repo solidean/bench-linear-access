@@ -15,10 +15,11 @@ def main():
     b.build()
 
     # run the benchmark
+    config = "release"
     if sys.platform == "win32":
-        exe = ROOT / "build" / "Release" / "bench-linear-access.exe"
+        exe = ROOT / "build" / config / "bin" / config.title() / "bench-linear-access.exe"
     else:
-        exe = ROOT / "build" / "bench-linear-access"
+        exe = ROOT / "build" / config / "bin" / "bench-linear-access"
     subprocess.run([str(exe)], check=True)
 
 
