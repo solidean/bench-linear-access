@@ -1,4 +1,4 @@
-# bench-linear-access
+# Benchmark: How Much Linear Memory Access Is Needed?
 
 A small benchmark exploring how memory access patterns affect throughput. It processes a fixed amount of data split into blocks of varying sizes, measuring MB/s for each block size. When blocks are small, the CPU can't prefetch ahead effectively and cache line utilization suffers; as block size grows toward contiguous access, throughput should increase significantly.
 

@@ -2,6 +2,8 @@
 #include "kernels.hh"
 
 #include <algorithm>
+#include <bit>
+#include <cassert>
 #include <print>
 #include <random>
 #include <span>
@@ -9,10 +11,25 @@
 
 struct experiment_config
 {
-    size_t total_memory_size;
-    size_t min_block_size = 1;
+    using kernel_fun = uint64_t (*)(std::span<std::span<float const> const>);
+
+    /// kernel to benchmark; called once per run with the block spans
+    /// each block is aligned to 32 bytes
+    kernel_fun kernel = nullptr;
+
+    /// total bytes the kernel touches per run; must be a power of two
+    size_t working_set_bytes;
+
+    /// smallest block size in bytes to test; must be a power of two and >= 32
+    size_t block_bytes_base = 32;
+
+    /// number of runs per block size (default 9, median is reported)
     size_t runs = 9;
-    size_t min_total_memory = 1uLL << 30;
+
+    /// size of the backing allocation that blocks are drawn from;
+    /// must satisfy: working_set_bytes * runs <= backing_memory_bytes
+    size_t backing_memory_bytes = 8uLL << 30;
+
     bool randomize_runs = true;
 };
 
@@ -20,7 +37,7 @@ struct experiment_result
 {
     double secs_data_prepare = -1;
 
-    std::vector<uint64_t> result_hashes;
+    uint64_t result_hash = 0;
 
     struct block_result
     {
@@ -34,11 +51,16 @@ struct experiment_result
 
 experiment_result run_experiment(experiment_config cfg)
 {
+    assert(cfg.kernel != nullptr);
+    assert(std::has_single_bit(cfg.working_set_bytes));
+    assert(std::has_single_bit(cfg.block_bytes_base));
+    assert(cfg.block_bytes_base >= 32);
+    assert(cfg.working_set_bytes * cfg.runs <= cfg.backing_memory_bytes);
+
     experiment_result res;
 
-    auto const total_memory = std::max(cfg.min_total_memory, cfg.total_memory_size * cfg.runs);
-    auto const total_size = total_memory / sizeof(float);
-    std::println("total_memory = {}", total_memory);
+    auto const total_size = cfg.backing_memory_bytes / sizeof(float);
+    std::println("backing_memory_bytes = {}", cfg.backing_memory_bytes);
     std::println("total_size = {}", total_size);
 
     std::vector<float> data;
@@ -64,8 +86,9 @@ experiment_result run_experiment(experiment_config cfg)
 
     // run each block size
     std::println("experiment per blocksize (bs):");
-    for (size_t block_size = cfg.min_block_size; block_size <= cfg.total_memory_size / sizeof(float); block_size *= 2)
+    for (size_t block_bytes = cfg.block_bytes_base; block_bytes <= cfg.working_set_bytes; block_bytes *= 2)
     {
+        auto const block_size = block_bytes / sizeof(float);
         auto const total_block_count = total_size / block_size;
         std::println("  total_block_count = {}", total_block_count);
 
@@ -75,10 +98,8 @@ experiment_result run_experiment(experiment_config cfg)
             blocks[i] = {data.data() + i * block_size, block_size};
         std::shuffle(blocks.begin(), blocks.end(), rng);
 
-        auto const block_size_bytes = block_size * sizeof(float);
-        auto const blocks_per_run = cfg.total_memory_size / block_size_bytes;
-        std::println("  bs = {} x {} per run (= {} B):", block_size_bytes, blocks_per_run,
-                     block_size_bytes * blocks_per_run);
+        auto const blocks_per_run = cfg.working_set_bytes / block_bytes;
+        std::println("  bs = {} x {} per run (= {} B):", block_bytes, blocks_per_run, block_bytes * blocks_per_run);
 
         // actually do the runs
         tmp_timing.clear();
@@ -87,21 +108,22 @@ experiment_result run_experiment(experiment_config cfg)
             auto const block_span = std::span<std::span<float const> const>(
                 blocks.data() + r * blocks_per_run * cfg.randomize_runs, blocks_per_run);
             timer t;
-            auto const h = kernel_scalar_stats(block_span);
+            auto const h = cfg.kernel(block_span);
             auto const secs = t.elapsed_secs();
-            res.result_hashes.push_back(h);
+            res.result_hash ^= h;
 
             tmp_timing.push_back(secs);
 
-            std::println("    {} secs ({} MB/s)", secs, int(block_size_bytes * blocks_per_run / secs / 1024. / 1024.));
+            std::println("    {} secs ({} MB/s)", secs, int(block_bytes * blocks_per_run / secs / 1024. / 1024.));
         }
 
+        // report median time
         std::sort(tmp_timing.begin(), tmp_timing.end());
         auto const secs = tmp_timing[tmp_timing.size() / 2];
 
         res.block_results.push_back({
-            .block_size_bytes = block_size_bytes,
-            .total_size_bytes = block_size_bytes * blocks_per_run,
+            .block_size_bytes = block_bytes,
+            .total_size_bytes = block_bytes * blocks_per_run,
             .secs = secs,
         });
     }
@@ -112,20 +134,17 @@ experiment_result run_experiment(experiment_config cfg)
 int main()
 {
     auto const res = run_experiment({
-        .total_memory_size = 16 * 1024uLL << 10,
-        .min_block_size = 4,
+        .kernel = kernel_scalar_stats,
+        .working_set_bytes = 16 * 1024uLL << 10,
         .randomize_runs = false,
     });
 
     // ensure results are never elided
-    uint64_t total_hash = 0;
-    for (auto h : res.result_hashes)
-        total_hash ^= h;
-    std::println("hash = {:016x}", total_hash);
+    std::println("hash = {:016x}", res.result_hash);
     std::println("");
 
     // results
     for (auto const& br : res.block_results)
-        std::println("{:4} MB/s for {:7} B blocks", int(br.total_size_bytes / br.secs / 1024. / 1024.),
+        std::println("{:4} MB/s for {:8} B blocks", int(br.total_size_bytes / br.secs / 1024. / 1024.),
                      br.block_size_bytes);
 }

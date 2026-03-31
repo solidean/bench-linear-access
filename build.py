@@ -9,14 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 
-def build():
+def build(config="Release"):
     subprocess.run(
         ["cmake", "-B", "build"],
         cwd=ROOT,
         check=True,
     )
     subprocess.run(
-        ["cmake", "--build", "build", "--config", "Release"],
+        ["cmake", "--build", "build", "--config", config],
         cwd=ROOT,
         check=True,
     )
