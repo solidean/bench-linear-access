@@ -1,12 +1,35 @@
 # Benchmark: How Much Linear Memory Access Is Needed?
 
-A small benchmark exploring how memory access patterns affect throughput. It processes a fixed amount of data split into blocks of varying sizes, measuring MB/s for each block size. When blocks are small, the CPU can't prefetch ahead effectively and cache line utilization suffers; as block size grows toward contiguous access, throughput should increase significantly.
+A small benchmark exploring how memory access patterns affect throughput. It processes a fixed amount of data split into blocks of varying sizes, measuring MB/s for each block size. 
 
-The benchmark generates random float data, optionally shuffles block order to defeat prefetching, then repeatedly computes simple statistics (sum, sum of squares, min, max) over each block layout. The median timing across runs is reported.
+For small block sizes, several overheads occur: the prefetcher is not as effective, the branch predictor has to work harder, TLB prefetching and caching suffers.
 
-TODO: describe setup in more detail once all variants are implemented
+We run three types of kernels:
+* `simd_sum` - a raw AVX2/NEON sum over the data. This reaches 50+ GB/s on some systems.
+* `scalar_stats` - simple computation but mostly scalar and a little branchy. Reaches ~5-10 GB/s.
+* `heavy_sin` - a dependent `sin(x)` for each value. Reaches ~400 MB/s.
 
-TODO: describe measurement policy (median of 9)
+A single run processes a fixed working set size (e.g. 64 MB total) split into blocks of linear memory (all the same size but randomized over a large block of backing memory, 4GB by default).
+Blocks vary from 32 B to 2 MB, always aligned to 32 B for SIMD.
+A kernel thus takes a `span<span<float const> const> data`.
+
+A single run executed the kernel over the working set.
+We execute multiple runs with the same setting and report the median.
+This reduces impact of outliers above (e.g. scheduling hiccups) and below (prefetcher and predictors being right "by accident").
+
+We test "randomized" and "repeated".
+For randomized, we clobber the cache before each run and each run also has a new randomized block layout.
+This is a kind of worst case where the cache hierarchy is irrelevant: caches completely cold and no data is touched twice.
+"repeated" only clobbers at the start of each set of runs with the same parameters and also doesn't randomize blocks in between.
+As we report the median, this means the cache hierarchy can be filled in the first run and subsequent ones benefit from partially warm data.
+
+In summary, the important parameters are:
+* `working_set_bytes`: total data processed per run, tested from 1 MB to 64 MB.
+* `backing_bytes`: large memory pool blocks are drawn from, fixed at 4 GB to ensure blocks are always cold relative to the working set.
+* `randomized` vs `repeated`: randomized clobbers the cache and picks a fresh block layout before each run, repeated only clobbers once and reuses the same layout so the cache can warm up across runs.
+* `block_bytes`: size of each contiguous memory block, swept from 32 B to 2 MB in powers of two, always aligned to 32 B for SIMD.
+* `kernel`: computation performed over the blocks, one of `simd_sum` (AVX2/NEON sum), `scalar_stats` (branchy scalar), or `heavy_sin` (dependent sin chain).
+
 
 ## Requirements
 
@@ -39,6 +62,12 @@ cmake --build build --config Release
 build\bin\bench-linear-access.exe     # Windows
 ```
 
-## TODO: Results
+## Results
 
-<!-- Add benchmark results here once collected on target hardware. -->
+### Ryzen 9 7950X3D
+
+![Normalized bandwidth](results/ryzen-9-7950X3D/chart4_normalized.svg)
+
+### MacBook Air M4
+
+![Normalized bandwidth](results/macbook-air-m4/chart4_normalized.svg)
