@@ -10,8 +10,11 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 add_executable(bench-linear-access src/main.cc)
 target_include_directories(bench-linear-access PRIVATE src)
 
-if(MSVC)
+if (MSVC)
     target_compile_options(bench-linear-access PRIVATE /arch:AVX2)
+elseif (APPLE)
+    # macOS (Apple Silicon): NEON is baseline, nothing to do
 else()
+    # Linux (GCC/Clang on x86_64)
     target_compile_options(bench-linear-access PRIVATE -mavx2)
 endif()
