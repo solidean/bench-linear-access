@@ -4,7 +4,9 @@
 # dependencies = ["pandas", "matplotlib"]
 # ///
 
+import argparse
 import math
+from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -30,16 +32,22 @@ plt.rcParams.update({
     "legend.labelcolor":  FG,
 })
 
+parser = argparse.ArgumentParser()
+parser.add_argument("csv", nargs="?", default="result.csv")
+args = parser.parse_args()
+csv_path = Path(args.csv)
+out_dir = csv_path.parent
+
 # ── Data loading ────────────────────────────────────────────────────────────
-df = pd.read_csv("result.csv")
+df = pd.read_csv(csv_path)
 # pandas parses "True"/"False" strings as booleans automatically
 df["throughput_mbs"] = df["working_set_bytes"] / df["duration_secs"] / 1e6
 
 # ── Color helpers ────────────────────────────────────────────────────────────
 # Each kernel gets a (start_color, end_color) pair; log2(working_set) drives t
 KERNEL_COLORS = {
-    "scalar_stats": ("#90caf9", "#1e88e5"),  # medium-light blue → vivid blue
     "simd_sum":     ("#a5d6a7", "#43a047"),  # medium-light green → vivid green
+    "scalar_stats": ("#90caf9", "#1e88e5"),  # medium-light blue → vivid blue
     "heavy_sin":        ("#ffcc80", "#ef6c00"),  # medium-light orange → vivid orange
 }
 WS_MIN = 20  # log2(1 MB)
@@ -96,7 +104,7 @@ ax1.set_ylim(bottom=0)
 ax1.set_title("scalar_stats — randomized")
 ax1.legend(title="Working set", fontsize=8, title_fontsize=8)
 fig1.tight_layout()
-fig1.savefig("chart1_scalar_randomized.svg", format="svg", facecolor=fig1.get_facecolor())
+fig1.savefig(out_dir / "chart1_scalar_randomized.svg", format="svg", facecolor=fig1.get_facecolor())
 print("Saved chart1_scalar_randomized.svg")
 
 # ── Plot 2: scalar_stats, repeated ──────────────────────────────────────────
@@ -115,14 +123,14 @@ ax2.set_ylim(bottom=0)
 ax2.set_title("scalar_stats — repeated")
 ax2.legend(title="Working set", fontsize=8, title_fontsize=8)
 fig2.tight_layout()
-fig2.savefig("chart2_scalar_repeated.svg", format="svg", facecolor=fig2.get_facecolor())
+fig2.savefig(out_dir / "chart2_scalar_repeated.svg", format="svg", facecolor=fig2.get_facecolor())
 print("Saved chart2_scalar_repeated.svg")
 
 # ── Plot 3: all kernels, randomized, working_set=64MB ───────────────────────
 fig3, ax3 = plt.subplots(figsize=(8, 5))
 
 data3 = df[(df["randomized"] == True) & (df["working_set_bytes"] == 67108864)]
-for kernel in ["scalar_stats", "simd_sum", "heavy_sin"]:
+for kernel in ["simd_sum", "scalar_stats", "heavy_sin"]:
     sub = data3[data3["kernel"] == kernel].sort_values("block_size_bytes")
     _, end_color = KERNEL_COLORS[kernel]
     color = hex_to_rgb(end_color)
@@ -135,7 +143,7 @@ ax3.set_ylabel("Throughput (MB/s)")
 ax3.set_title("All kernels — randomized, 64 MB working set")
 ax3.legend(title="Kernel", fontsize=8, title_fontsize=8)
 fig3.tight_layout()
-fig3.savefig("chart3_kernels_64mb.svg", format="svg", facecolor=fig3.get_facecolor())
+fig3.savefig(out_dir / "chart3_kernels_64mb.svg", format="svg", facecolor=fig3.get_facecolor())
 print("Saved chart3_kernels_64mb.svg")
 
 # ── Plot 4: normalized throughput (all data) ─────────────────────────────────
@@ -159,13 +167,13 @@ ax4.set_ylim(0, 1.05)
 
 # Legend: kernel color patches + line style for randomized/repeated
 legend_elements = [
+    Patch(facecolor=hex_to_rgb(KERNEL_COLORS["heavy_sin"][1]),        label="heavy_sin"),
     Patch(facecolor=hex_to_rgb(KERNEL_COLORS["scalar_stats"][1]), label="scalar_stats"),
     Patch(facecolor=hex_to_rgb(KERNEL_COLORS["simd_sum"][1]),     label="simd_sum"),
-    Patch(facecolor=hex_to_rgb(KERNEL_COLORS["heavy_sin"][1]),        label="heavy_sin"),
     Line2D([0], [0], color=FG, linestyle="-",  label="randomized"),
     Line2D([0], [0], color=FG, linestyle=":",  label="repeated"),
 ]
 ax4.legend(handles=legend_elements, fontsize=8)
 fig4.tight_layout()
-fig4.savefig("chart4_normalized.svg", format="svg", facecolor=fig4.get_facecolor())
+fig4.savefig(out_dir / "chart4_normalized.svg", format="svg", facecolor=fig4.get_facecolor())
 print("Saved chart4_normalized.svg")
