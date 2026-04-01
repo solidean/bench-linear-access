@@ -8,7 +8,7 @@
 #include <span>
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
-#include <arm_neon.h> // UNTESTED on ARM
+#include <arm_neon.h>
 #else
 #include <immintrin.h>
 #endif
@@ -61,7 +61,7 @@ inline uint64_t kernel_simd_sum(std::span<std::span<float const> const> data)
         h ^= w;
     return uint64_t(h);
 
-#elif defined(__ARM_NEON) || defined(__ARM_NEON__) // UNTESTED
+#elif defined(__ARM_NEON) || defined(__ARM_NEON__)
     float32x4_t acc_lo = vdupq_n_f32(0.f);
     float32x4_t acc_hi = vdupq_n_f32(0.f);
     for (auto block : data)
