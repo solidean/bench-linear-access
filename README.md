@@ -59,7 +59,7 @@ cmake --build build --config Release
 
 # Run
 ./build/bin/bench-linear-access       # Linux / macOS
-build\bin\bench-linear-access.exe     # Windows
+build\bin\Release\bench-linear-access.exe     # Windows
 ```
 
 ## Results
