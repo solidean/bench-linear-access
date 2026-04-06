@@ -89,7 +89,7 @@ def setup_xaxis(ax):
 
 
 # ── Plot 1: scalar_stats, randomized ────────────────────────────────────────
-fig1, ax1 = plt.subplots(figsize=(8, 5))
+fig1, ax1 = plt.subplots(figsize=(1018/96, 1018/96*5/8), dpi=96)
 
 data1 = df[(df["kernel"] == "scalar_stats") & (df["randomized"] == True)]
 for ws in sorted(data1["working_set_bytes"].unique()):
@@ -108,7 +108,7 @@ fig1.savefig(out_dir / "chart1_scalar_randomized.svg", format="svg", facecolor=f
 print("Saved chart1_scalar_randomized.svg")
 
 # ── Plot 2: scalar_stats, repeated ──────────────────────────────────────────
-fig2, ax2 = plt.subplots(figsize=(8, 5))
+fig2, ax2 = plt.subplots(figsize=(1018/96, 1018/96*5/8), dpi=96)
 
 data2 = df[(df["kernel"] == "scalar_stats") & (df["randomized"] == False)]
 for ws in sorted(data2["working_set_bytes"].unique()):
@@ -127,7 +127,7 @@ fig2.savefig(out_dir / "chart2_scalar_repeated.svg", format="svg", facecolor=fig
 print("Saved chart2_scalar_repeated.svg")
 
 # ── Plot 3: all kernels, randomized, working_set=64MB ───────────────────────
-fig3, ax3 = plt.subplots(figsize=(8, 5))
+fig3, ax3 = plt.subplots(figsize=(1018/96, 1018/96*5/8), dpi=96)
 
 data3 = df[(df["randomized"] == True) & (df["working_set_bytes"] == 67108864)]
 for kernel in ["simd_sum", "scalar_stats", "heavy_sin"]:
@@ -147,7 +147,7 @@ fig3.savefig(out_dir / "chart3_kernels_64mb.svg", format="svg", facecolor=fig3.g
 print("Saved chart3_kernels_64mb.svg")
 
 # ── Plot 4: normalized throughput (all data) ─────────────────────────────────
-fig4, ax4 = plt.subplots(figsize=(8, 5))
+fig4, ax4 = plt.subplots(figsize=(1018/96, 1018/96*5/8), dpi=96)
 
 groups = df.groupby(["kernel", "randomized", "working_set_bytes"])
 for (kernel, randomized, ws), grp in groups:
